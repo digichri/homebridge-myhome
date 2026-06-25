@@ -10,6 +10,31 @@
 
 </span>
 
+---
+
+## ⚠️ Fork note — Homebridge 2.x / HAP v2 compatibility
+
+This is a fork of [`LeJeko/homebridge-myhome`](https://github.com/LeJeko/homebridge-myhome) (upstream is unmaintained — last commit 2020). The **only** change versus upstream is a small, self-contained compatibility shim added at the top of the plugin's initialiser in `index.js`, so the plugin keeps working on **Homebridge 2.x**.
+
+### What the shim does
+Homebridge 2.x ships HAP-NodeJS v2, which removed several APIs this plugin relies on. The shim restores them with no changes to the plugin's own logic:
+
+1. **`Characteristic.Formats` / `Perms` / `Units`** — re-aliased from the `hap` module root (where they still live).
+2. **`Service.BatteryService`** — aliased to its replacement `Service.Battery`.
+3. **`Characteristic.prototype.getValue(callback)`** — removed in HAP v2; reimplemented using the still-supported `'get'` event + `updateValue()`, preserving the plugin's original "re-read and push to HomeKit after an OpenWebNet bus event" behaviour.
+
+Every shim is **guarded by an existence check**, so it is a **no-op on Homebridge 1.x** — the same file runs unchanged on both 1.x and 2.x.
+
+### What this fork does NOT claim
+- It's a **compatibility shim, not a rewrite** to the modern `onGet`/`onSet` API.
+- It was verified on **Homebridge 2.1.0 / HAP v2.1.7 / Node 24**, and **only against the accessory types actually in use by the author: lights & outlets (`MHRelay`), dimmers (`MHDimmer`), and blinds (`MHBlind`)** — both at startup and against live OpenWebNet bus events (via a mock gateway).
+- **Not runtime-tested on 2.x:** `MHThermostat`, `MHThermometer`, `MHPowerMeter` (+ Eve history), `MHAlarm` (+ battery), `MHDryContact`, `MHAux`, `MHScenario`, `MHControlledLoad`, `MHIrrigation`, `MHBlindAdvanced`, `MHTimedRelay`. The shim restores the APIs they use, so they are *expected* to work, but this is **unverified**.
+- Not tested across the full range of OpenWebNet gateways/firmware or every Homebridge/HAP 2.x point release.
+- Pre-existing quirks are unchanged (e.g. an occasional `Current Position … NaN` warning on blinds).
+- No warranty — MIT licensed, use at your own risk. Issues/PRs for untested accessory types welcome.
+
+---
+
 ## Why own?
 
 Short answer: OpenWebNet.

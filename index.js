@@ -42,6 +42,41 @@ module.exports = function (homebridge) {
 	Characteristic = homebridge.hap.Characteristic;
 	Accessory = homebridge.platformAccessory;
 	UUIDGen = homebridge.hap.uuid;
+
+	/* ---- Homebridge 2.x / HAP v2 compatibility shim (added for migration) ----
+	 * HAP v2 (shipped with Homebridge 2.x) removed several APIs this
+	 * unmaintained plugin relies on. Restore them here so the existing code
+	 * paths keep working unchanged. Every shim is guarded by an existence
+	 * check, so this block is a no-op on HAP v1 (Homebridge 1.x).
+	 */
+	// 1. Enum tables moved from Characteristic.* to the hap module root.
+	if (!Characteristic.Formats && homebridge.hap.Formats) Characteristic.Formats = homebridge.hap.Formats;
+	if (!Characteristic.Perms && homebridge.hap.Perms) Characteristic.Perms = homebridge.hap.Perms;
+	if (!Characteristic.Units && homebridge.hap.Units) Characteristic.Units = homebridge.hap.Units;
+	// 2. Service.BatteryService was renamed to Service.Battery.
+	if (!Service.BatteryService && Service.Battery) Service.BatteryService = Service.Battery;
+	// 3. Characteristic.getValue(callback) was removed in favour of the async
+	//    value/handleGetRequest API. This plugin calls getValue(null) purely to
+	//    re-run the registered 'get' handler and push the fresh value to HomeKit
+	//    subscribers after an OpenWebNet bus event. Reimplement that exact
+	//    behaviour using the still-supported 'get' event + updateValue().
+	if (typeof Characteristic.prototype.getValue !== 'function') {
+		Characteristic.prototype.getValue = function (callback, context) {
+			if (this.listeners('get').length > 0) {
+				var done = false;
+				this.emit('get', function (status, value) {
+					if (done) return;
+					done = true;
+					if (!status) this.updateValue(value);
+					if (typeof callback === 'function') callback(status, value);
+				}.bind(this), context);
+			} else {
+				this.updateValue(this.value);
+				if (typeof callback === 'function') callback(null, this.value);
+			}
+		};
+	}
+
 	var FakeGatoHistoryService = require('fakegato-history')(homebridge);
 
 	/* Try to map Elgato custom vars */
